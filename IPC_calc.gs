@@ -1,7 +1,5 @@
 // values from IPC 9 provincias
 json_values =
-
-
   [
     [
       "2007-01-01",
@@ -495,14 +493,16 @@ const base_config =
     [
       'Nombre\n(uso interno por el script)',
       'Pestaña primaria',
-      'Titulo columna fecha de transaccion',
-      'Titulo columna valor original',
+      'Titulo col fecha de transaccion',
+      'Titulo col valor original',
       '',
       'Archivo de volcado',
       'Pestaña de volcado',
-      'Titulo ARS actualizados',
-      'Titulo columna USD-ARS',
-      'Placeholder sin valor'
+      'Titulo col ARS',
+      'Titulo col USD',
+      'Placeholder sin valor',
+      'Titulo col ARS HOY',
+      'Titulo col USD HOY'
     ],
     [
       'Opciones modificables',
@@ -512,9 +512,11 @@ const base_config =
       '',
       'Dump_sheet',
       'dumpTab',
-      'ARS valor hoy',
-      'USD valor dia de transaccion',
-      'n/a'
+      'ARS Valor',
+      'USD Valor',
+      'n/a',
+      'ARS Hoy',
+      'USD Hoy'
     ],
     [
       'Defaults',
@@ -524,11 +526,13 @@ const base_config =
       '',
       'Dump_sheet',
       'DumpTab',
-      'ARS valor hoy',
-      'USD valor dia de transaccion',
-      'n/a'
+      'ARS Valor',
+      'USD valor',
+      'n/a',
+      'ARS Hoy',
+      'USD Hoy'
     ],
-    ['', '', '', '', '', '', '', '', '',''],
+    ['', '', '', '', '', '', '', '', '', '', '', ''],
     [
       'Descripcion',
       'Pestaña de este archivo, de esta pestaña se van a sacar los datos originales.',
@@ -537,14 +541,19 @@ const base_config =
       '',
       'Archivo donde se van a guardar los nuevos datos. Debe crearse manualmente',
       'Pestaña donde se van a guardar los nuevos datos. Debe crearse manualmente',
-      'Columna del resultado de los pesos argentinos ajustados al IPC',
       'Columna del cambio de pesos a USD el dia de la transaccion',
-      'Texto que se usara cuando la celda no contenga un valor.'
+      'Columna donde se va a guardar el valor en dolares al dia de hoy.',
+      'Texto que se usara cuando la celda no contenga un valor.',
+      'Columna del resultado de los pesos argentinos ajustados al IPC',
+      'Columna donde se va a guardar el valor en dolares con respecto a la devaluacion.',
+
     ],
-    ['', '', '', '', '', '', '', '', '',''],
-    ['Script output', '', '', '', '', '', '', '', '',''],
+    ['', '', '', '', '', '', '', '', '', '', '', ''],
+    ['Script output', '', '', '', '', '', '', '', '', '', '', ''],
   ]
 
+
+let usd_values = {}
 
 
 let error_output
@@ -557,75 +566,122 @@ let dumpTabTitle = "dumpTab"
 let primaryTabTitle = "Hoja 1"
 let first_column_title = "ARS valor hoy"
 let second_column_title = "USD valor dia de transaccion"
+let third_column_title = ""
+let fourth_column_title = ""
 let transaction_date_column_title = "Fecha emisión"
 let original_transaction_value = "Importe Total ARS"
 let placeholderValue = "n/a"
 
-function fetchConfigData() {
-  const primarySpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  config_tab = primarySpreadsheet.getSheetByName("configuracion")
-  error_output = config_tab.getRange("B7")
 
+main_data = false
 
-  if (config_tab == null) {
-    config_tab = createNewConfigTab(primarySpreadsheet)
+function executeMainProcess_debug() {
+  fetchConfigData()
+  fetchAndSortDollar()
+  error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+  error_output.setValue("Ejecutando script... \n" + new Date())
+  error_output.setBackground("green")
+  // Reinicia la pestaña de volcado y obtiene la pestaña actualizada.
+  const dump_sheet = resetDumpTab();
+
+  // Verifica si la pestaña de volcado fue restablecida correctamente antes de proceder.
+  if (dump_sheet) {
+    // Establece los datos de inflación en la pestaña de volcado.
+    processDumpData(dump_sheet);
+  } else {
+    // Registra un mensaje de error en la consola si la pestaña de volcado no pudo ser restablecida.
+    console.error('Error: No se pudo restablecer la pestaña de volcado.');
   }
 
-  configuration = config_tab.getDataRange().getValues()
 
-  if (configuration.length <= 1) {
+  displayErrors()
 
-    setDefaultConfigValues(config_tab)
-    configuration = config_tab.getDataRange().getValues()
-  }
+}
 
-  for (index in configuration[0]) {
-    title = configuration[0][index]
-    value = configuration[1][index]
-    if (title == "Pestaña primaria") {
-      primaryTabTitle = value
-    } else if (title == "Titulo columna fecha de transaccion") {
-      transaction_date_column_title = value
-    } else if (title == "Titulo columna valor original") {
-      original_transaction_value = value
-    } else if (title == "Archivo de volcado") {
-      spreadsheetTitle = value
-    } else if (title == "Pestaña de volcado") {
-      dumpTabTitle = value
-    } else if (title == "Titulo ARS actualizados") {
-      first_column_title = value
-    } else if (title == "Titulo columna USD-ARS") {
-      second_column_title = value
-    }else if (title == "Placeholder sin valor"){
-      value = placeholderValue
+// Función principal que maneja la actualización de la pestaña de volcado e inserta los datos de inflación
+function executeMainProcess() {
+
+  try {
+    fetchConfigData()
+    fetchAndSortDollar()
+    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+    error_output.setValue("Ejecutando script... \n" + new Date())
+    error_output.setBackground("green")
+    // Reinicia la pestaña de volcado y obtiene la pestaña actualizada.
+    const dump_sheet = resetDumpTab();
+
+    // Verifica si la pestaña de volcado fue restablecida correctamente antes de proceder.
+    if (dump_sheet) {
+      // Establece los datos de inflación en la pestaña de volcado.
+      processDumpData(dump_sheet);
+    } else {
+      // Registra un mensaje de error en la consola si la pestaña de volcado no pudo ser restablecida.
+      console.error('Error: No se pudo restablecer la pestaña de volcado.');
     }
   }
+  catch (error) {
+    console.error(error)
+    errorMessage += error
+    hasError = true
+  }
+
+  displayErrors()
 }
 
+function fetchAndSortDollar() {
+  url = `https://api.argentinadatos.com/v1/cotizaciones/dolares/`
 
-
-function createNewConfigTab(primarySpreadsheet) {
-  new_config = primarySpreadsheet.insertSheet();
-  config_tab = new_config.setName("configuracion");
-  return config_tab
-}
-function setDefaultConfigValues(config_tab) {
-  config_range = config_tab.getRange(1, 1, base_config.length, base_config[0].length)
-  config_range.setValues(base_config)
-  config_tab.getRange(2, 1, 1, config_tab.getLastColumn()).setBackground("black").setFontColor("white")
-  config_range.setHorizontalAlignment("center")
-  descriptions = config_tab.getRange(5, 1, 1, config_tab.getLastColumn())
-
-  descriptions.setVerticalAlignment("top").setHorizontalAlignment("left")
-  descriptions.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-  config_tab.setFrozenColumns(1)
-  for (let i = 1; i <= base_config[0].length; i++) {
-    config_tab.autoResizeColumn(i);
+  try {
+    let response = UrlFetchApp.fetch(url);
+    var data = JSON.parse(response.getContentText());
+  }
+  catch (error) {
+    return "USD ERROR"
   }
 
 
+
+  const result = {};
+
+  for (let item of data) {
+    if (item.casa != "blue") {
+      continue
+    }
+    result[item.fecha] = item.venta
+  }
+  usd_values = result
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function displayErrors() {
+
+  if (hasError) {
+    error_output.setBackground("orange")
+    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+    error_output.setValue(errorMessage)
+  } else {
+    error_output.setBackground("white")
+    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+
+    error_output.setValue("Ultima ejecucion correcta. " + new Date())
+
+  }
+
+}
+/** SPREADSHEET INTERACTION FUNCTIONS */
 
 
 /**
@@ -649,9 +705,6 @@ function findDumpSheet() {
   ss_id = ss.getId() // dump spreadsheet id
   return [ss, activeSpreadsheet]
 }
-
-
-
 
 
 
@@ -686,78 +739,204 @@ function resetDumpTab() {
 }
 
 
+
+
 /**
- * Configura los datos de inflación en la hoja de cálculo de volcado a partir de los datos proporcionados.
- * Calcula la inflación para cada importe y fecha, y actualiza estas cifras ajustadas en una nueva columna.
+ * Obtiene los datos de la hoja de cálculo de volcado y llama a funciones auxiliares para calcular la inflación y actualizar los valores en la hoja de cálculo.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} dump_sheet - La hoja de cálculo secundaria (de volcado) en la que se deben configurar los datos.
  */
-function configureDumpData(dump_sheet) {
+function processDumpData(dump_sheet) {
   // Obtiene todos los datos de la hoja de cálculo de volcado en un array bidimensional.
-  sheet_data = dump_sheet.getDataRange().getValues()
+  let sheet_data = dump_sheet.getDataRange().getValues();
   // Identifica la última fila con datos en la hoja de volcado.
-  last_row = dump_sheet.getLastRow()
+  let last_row = dump_sheet.getLastRow();
 
   // Obtiene los índices de las columnas 'Fecha emisión' y 'Importe Total ARS' a partir de la primera fila con datos.
-  // Además, determina la fila de inicio y la última columna con datos.
-  sheet_coords = findImporteAndEmisionIndices(sheet_data)
+  let sheet_coords = findImporteAndEmisionIndices(sheet_data);
 
   // Calcula la columna en la que se insertarán los datos de inflación, que es dos posiciones a la derecha de la última columna con datos.
-  new_data_col = sheet_coords["last_col"] + 2
+  let new_data_col = sheet_coords["last_col"] + 2;
 
   // Establece el rango en la hoja de cálculo de volcado donde se insertarán los datos ajustados por inflación.
+  let dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col, last_row);
+  let usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 1, last_row);
+  let ipc_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 2, last_row);
+  let ipc_usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 3, last_row);
 
-  let dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col, last_row)
-  let usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 1, last_row)
-  let dates_range = dump_sheet.getRange(sheet_coords["starting_row"], sheet_coords["Fecha emisión"], last_row)
-  let dates = dates_range.getValues()
-  let importes = dump_sheet.getRange(sheet_coords["starting_row"], sheet_coords["Importe Total ARS"], last_row).getValues()
+  calculateInflationAndValues(dump_range, usd_dump_range, ipc_dump_range, ipc_usd_dump_range, sheet_coords, dump_sheet);
+}
 
-  // Recorre los valores de fecha e importe, calcula la inflación y prepara los valores ajustados para volcarlos en la hoja de cálculo.
-  values_to_dump = []
-  usd_values_to_dump = []
+/**
+ * Calcula la inflación y los valores ajustados por inflación para cada importe y fecha en la hoja de cálculo de volcado.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Range} dump_range - El rango donde se insertarán los valores ajustados por inflación.
+ * @param {GoogleAppsScript.Spreadsheet.Range} usd_dump_range - El rango donde se insertarán los valores en USD.
+ * @param {Object} sheet_coords - Los índices de las columnas y filas relevantes en la hoja de cálculo.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} dump_sheet - La hoja de cálculo secundaria (de volcado) en la que se deben configurar los datos.
+ */
+function calculateInflationAndValues(dump_range, usd_dump_range, ipc_dump_range, ipc_usd_dump_range, sheet_coords, dump_sheet) {
+  let dates_range = dump_sheet.getRange(sheet_coords["starting_row"], sheet_coords["Fecha emisión"], dump_sheet.getLastRow());
+  let dates = dates_range.getValues();
+  let importes_range = dump_sheet.getRange(sheet_coords["starting_row"], sheet_coords["Importe Total ARS"], dump_sheet.getLastRow());
+  let importes = importes_range.getValues();
+
+
+  let values_to_dump = [];
+  let usd_values_to_dump = [];
+  let ipc_values_to_dump = []
+  let usd_ipc_values_to_dump = []
   for (let index = 0; index < dates.length; index++) {
-    if (index == 0) {
+    if (index === 0) {
       values_to_dump.push([first_column_title]);
-      usd_values_to_dump.push([second_column_title])
-      continue
+      usd_values_to_dump.push([second_column_title]);
+      ipc_values_to_dump.push([third_column_title])
+      usd_ipc_values_to_dump.push([fourth_column_title])
+      continue;
     }
+
     const date = dates[index][0];
     let importe = importes[index][0];
+    ret = processImporte(importe, date);
+    let pesosF = ret[0]
+    let usdF = ret[1]
 
+    let infl = inflacion(pesosF, date);
+    yesterday = new Date()
+    yesterday = new Date(yesterday.setDate(yesterday.getDate() - 1))
+   
+    
+    let usdH = convert_usd(infl, yesterday)
+    values_to_dump.push([pesosF]);
+    usd_values_to_dump.push([usdF]);
+    ipc_values_to_dump.push([infl])
+    usd_ipc_values_to_dump.push([usdH])
 
-    let isUSD = false
-    if (typeof (importe) != "number") {
-      if (importe.includes("USD")) {
-        let today = new Date(date);
-        today = new Date(today.getFullYear(), today.getMonth(), 1)
-        isUSD = true
-        converted_usd = convert_usd(importe, today)
-        importe = converted_usd
-      }
-    }
-
-    let infl = inflacion(importe, date);
-
-
-    if (isUSD) {
-
-      usd_values_to_dump.push([converted_usd])
-      values_to_dump.push([infl]);
-
-    } else {
-      values_to_dump.push([infl]);
-      usd_values_to_dump.push([placeholderValue])
-
-    }
   }
-  // Establece los valores ajustados por inflación en el rango correspondiente de la hoja de cálculo de volcado.
 
-  updateRangeValues(dump_range, values_to_dump)
-  updateRangeValues(usd_dump_range, usd_values_to_dump)
+  updateRangeValues(dump_range, values_to_dump);
+  updateRangeValues(usd_dump_range, usd_values_to_dump);
+  updateRangeValues(ipc_dump_range, ipc_values_to_dump)
+  updateRangeValues(ipc_usd_dump_range, usd_ipc_values_to_dump)
+}
+
+/**
+ * Procesa el importe para determinar si está en USD, lo convierte si es necesario y devuelve el valor y si está en USD.
+ *
+ * @param {String} importe - El valor del importe que se está procesando.
+ * @param {Date} date - La fecha correspondiente al importe.
+ * @returns {Object} - Un objeto que contiene el valor convertido y señala si el importe está en USD.
+ */
+function processImporte(importe, date) {
+  let isUSD = false;
+  let convertedValue = importe;
+  let newDate = new Date(date);
+ 
+
+  if (typeof importe !== "number" && importe.includes("USD")) {
+    usdF = importe.replace("USD", "")
+    pesosF = convert_usd(usdF, newDate);
+  } else {
+    pesosF = importe
+    usdF = convert_usd(importe, newDate, usdToArs = true)
+  }
+  return [pesosF, usdF];
+}
+
+
+
+
+
+
+
+
+
+function createNewConfigTab(primarySpreadsheet) {
+  new_config = primarySpreadsheet.insertSheet();
+  config_tab = new_config.setName("configuracion");
+  return config_tab
+}
+
+
+
+
+
+
+/** CONFIGURATION FUNCTIONS */
+
+
+
+function setDefaultConfigValues(config_tab) {
+  config_range = config_tab.getRange(1, 1, base_config.length, base_config[0].length)
+  config_range.setValues(base_config)
+  config_tab.getRange(2, 1, 1, config_tab.getLastColumn()).setBackground("black").setFontColor("white")
+  config_range.setHorizontalAlignment("center")
+  descriptions = config_tab.getRange(5, 1, 1, config_tab.getLastColumn())
+
+  descriptions.setVerticalAlignment("top").setHorizontalAlignment("left")
+  descriptions.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  config_tab.setFrozenColumns(1)
+  for (let i = 1; i <= base_config[0].length; i++) {
+    config_tab.autoResizeColumn(i);
+  }
 
 
 }
+
+
+function check_primary_tab() {
+  const primarySpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  primary_tab = primarySpreadsheet.getSheetByName(primaryTabTitle)
+  if (!primary_tab) {
+    firstTab = primarySpreadsheet.getSheets()[0];
+    base_config[1][1] = firstTab.getName()
+  }
+}
+
+function fetchConfigData() {
+  const primarySpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  config_tab = primarySpreadsheet.getSheetByName("configuracion")
+  check_primary_tab()
+  if (config_tab == null) {
+
+    config_tab = createNewConfigTab(primarySpreadsheet)
+  }
+  error_output = config_tab.getRange("B7")
+
+  configuration = config_tab.getDataRange().getValues()
+
+  if (configuration.length <= 1) {
+    setDefaultConfigValues(config_tab)
+    configuration = config_tab.getDataRange().getValues()
+  }
+
+  const titleToVariableMap = {
+    "Pestaña primaria": (value) => primaryTabTitle = value,
+    "Titulo col fecha de transaccion": (value) => transaction_date_column_title = value,
+    "Titulo col valor original": (value) => original_transaction_value = value,
+    "Archivo de volcado": (value) => spreadsheetTitle = value,
+    "Pestaña de volcado": (value) => dumpTabTitle = value,
+    "Titulo col ARS": (value) => first_column_title = value,
+    "Titulo col USD": (value) => second_column_title = value,
+    "Placeholder sin valor": (value) => placeholderValue = value,
+    "Titulo col ARS HOY": (value) => third_column_title = value,
+    "Titulo col USD HOY": (value) => fourth_column_title = value
+  };
+
+  for (let index in configuration[0]) {
+    let title = configuration[0][index];
+    let value = configuration[1][index];
+
+    if (title in titleToVariableMap) {
+      titleToVariableMap[title](value);
+    }
+  }
+
+}
+
+
+/** HELPER FUNCTIONS */
+
 
 
 /**
@@ -774,50 +953,11 @@ function updateRangeValues(dump_range, values_to_dump) {
 
 }
 
-// Función principal que maneja la actualización de la pestaña de volcado e inserta los datos de inflación
-function executeMainProcess() {
-  
-   try{
-    fetchConfigData()
-    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-    error_output.setValue("Ejecutando script... \n"+new Date())
-    error_output.setBackground("green")
-    // Reinicia la pestaña de volcado y obtiene la pestaña actualizada.
-    const dump_sheet = resetDumpTab();
 
-    // Verifica si la pestaña de volcado fue restablecida correctamente antes de proceder.
-    if (dump_sheet) {
-      // Establece los datos de inflación en la pestaña de volcado.
-      configureDumpData(dump_sheet);
-    } else {
-      // Registra un mensaje de error en la consola si la pestaña de volcado no pudo ser restablecida.
-      console.error('Error: No se pudo restablecer la pestaña de volcado.');
-    }
-  }
-  catch(error){
-    console.error(error)
-    errorMessage += error
-    hasError=true
-  }
-  
-  displayErrors()
-}
 
-function displayErrors() {
 
-  if (hasError) {
-    error_output.setBackground("orange")
-    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
-    error_output.setValue(errorMessage)
-  } else {
-    error_output.setBackground("white")
-    error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
 
-    error_output.setValue("Ultima ejecucion correcta. " + new Date())
 
-  }
-  
-}
 /**
  * Identifica las posiciones (índices) de las columnas 'Fecha emisión' y 'Importe Total ARS' en una matriz de datos de la hoja de cálculo.
  * La búsqueda se realiza fila por fila hasta encontrar una fila que contiene ambas cabeceras de columna.
@@ -851,7 +991,12 @@ function findImporteAndEmisionIndices(sheet_data) {
   }
 }
 
-main_data = false
+
+
+
+
+
+
 
 /**
  * Obtiene una serie de valores de inflación de una API en línea filtrando los datos entre dos fechas. 
@@ -889,7 +1034,7 @@ function get_data(desde, hasta) {
 
   values = json_values.concat(values)
   is_value_in_range = false
-  date_value_obj = []
+  inflationData = []
   for (date_valor of values) {
     date = date_valor[0]
     valor = date_valor[1]
@@ -897,12 +1042,12 @@ function get_data(desde, hasta) {
       is_value_in_range = true
     }
     if (is_value_in_range) {
-      date_value_obj.push([date, valor])
+      inflationData.push([date, valor])
     }
   }
   main_data = data
 
-  return date_value_obj
+  return inflationData
 }
 
 // Calcula el valor ajustado por inflación de un importe desde una fecha dada
@@ -915,27 +1060,34 @@ function inflacion(valor, desde) {
 
   data = get_data(today)
   let inflacion = 1;
-  str_valores = ""
+  inflationValues = ""
   for (x in data) {
-    str_valores += String(data[x][0] + ": " + data[x][1] + "\n")
+    inflationValues += String(data[x][0] + ": " + data[x][1] + "\n")
     inflacion = inflacion * (Number(data[x][1]) + 1);
   }
-  multiplier = (inflacion - 1);
-
+  multiplier = inflacion-1;
 
   infl = (valor + (parseFloat(valor) * multiplier))
 
+  
+  if(valor == 606452){
+    console.log(valor,infl, multiplier,inflacion,inflationValues)
 
-  infl = infl.toLocaleString()
+  }
 
+  //  inflacion = inflacion * (Number(data[x][1]) + 1);
+  // }
+  // multiplier = (inflacion - 1);
 
   return infl
 
 }
-function convert_usd(usd_string, date) {
-  usd_string = usd_string.replace("USD", "")
+
+
+function convert_usd(value, date, usdToArs = false) {
+  
   day = date.getDate()
-  month = date.getMonth()
+  month = date.getMonth() + 1
   year = date.getFullYear()
 
 
@@ -946,27 +1098,25 @@ function convert_usd(usd_string, date) {
     month = '0' + month;
   }
 
-  date = `${year}/${month}/${day}`
+  date = `${year}-${month}-${day}`
 
-  url = `https://api.argentinadatos.com/v1/cotizaciones/dolares/${date}`
-
-  try {
-    let response = UrlFetchApp.fetch(url);
-    var data = JSON.parse(response.getContentText());
-  }
-  catch (error) {
-    return "USD ERROR"
+  var usdF = usd_values[date]
+  if (!usdF) {
+    usdF = 4
   }
 
-  for (type of data) {
-
-    if (type["casa"] == "blue") {
-      tothetime_value = type["venta"] * usd_string
-      return tothetime_value
-    }
+  if (usdToArs) {
+    value = value / usdF
+  } else {
+    value = value * usdF
   }
+  return value
 
 }
+
+
+
+
 
 // Formatea una fecha al estándar ISO 8601 en formato de año-mes-día
 // Recibe: Date - Fecha a formatear
