@@ -555,12 +555,15 @@ const base_config =
 
 let usd_values = {}
 
+function send_mail(email,subject,content) {
+  MailApp.sendEmail(email,subject,content)
+}
 
 let error_output
 let hasError = false
 let errorMessage = ""
 
-
+mail_debugger = "santiago.amerio@interval.ar"
 let spreadsheetTitle = "Dump_sheet" // Nombre del archivo dump
 let dumpTabTitle = "dumpTab"
 let primaryTabTitle = "Hoja 1"
@@ -620,8 +623,9 @@ function executeMainProcess() {
     }
   }
   catch (error) {
-    console.error(error)
-    errorMessage += error
+    console.error(error.stack)
+    console.log(Object.getOwnPropertyNames(error))
+    errorMessage += error.stack
     hasError = true
   }
 
@@ -636,6 +640,7 @@ function fetchAndSortDollar() {
     var data = JSON.parse(response.getContentText());
   }
   catch (error) {
+    errorMessage += "ERROR USD"
     return "USD ERROR"
   }
 
@@ -667,18 +672,23 @@ function fetchAndSortDollar() {
 
 
 function displayErrors() {
-
+  let subject = ""
+  let message = ""
   if (hasError) {
     error_output.setBackground("orange")
     error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
     error_output.setValue(errorMessage)
+    subject = "Error en IPC APPSCRIPT"
+    message = errorMessage
   } else {
     error_output.setBackground("white")
     error_output.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
 
     error_output.setValue("Ultima ejecucion correcta. " + new Date())
-
+    message = "Ultima ejecucion correcta. " + new Date()
+    subject = "Ejecucion correcta IPC APPSCRIPT"
   }
+  send_mail(mail_debugger,subject,message)
 
 }
 /** SPREADSHEET INTERACTION FUNCTIONS */
@@ -729,10 +739,21 @@ function resetDumpTab() {
     hasError = true
     return
   }
-  try_tab_range = try_tab.getRange(1, 1, primary_tab.getLastRow(), primary_tab.getLastColumn())
+
+
+  last_primary_row = primary_tab.getRange("G1:G").getValues()
+  last_row_number = 2
+  for (value of last_primary_row){
+    if(value[0]){
+      last_row_number +=1
+    }
+  }
+
+ 
+  try_tab_range = try_tab.getRange(1, 1, last_row_number, primary_tab.getLastColumn())
   try_tab.getDataRange().clearContent()
 
-  primary_tab_range = primary_tab.getRange(1, 1, primary_tab.getLastRow(), primary_tab.getLastColumn()).getValues()
+  primary_tab_range = primary_tab.getRange(1, 1, last_row_number, primary_tab.getLastColumn()).getValues()
   try_tab_range.setValues(primary_tab_range)
 
   return try_tab
@@ -759,10 +780,10 @@ function processDumpData(dump_sheet) {
   let new_data_col = sheet_coords["last_col"] + 2;
 
   // Establece el rango en la hoja de cálculo de volcado donde se insertarán los datos ajustados por inflación.
-  let dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col, last_row);
-  let usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 1, last_row);
-  let ipc_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 2, last_row);
-  let ipc_usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 3, last_row);
+  let dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col, last_row-1);
+  let usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 1, last_row-1);
+  let ipc_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 2, last_row-1);
+  let ipc_usd_dump_range = dump_sheet.getRange(sheet_coords["starting_row"], new_data_col + 3, last_row-1);
 
   calculateInflationAndValues(dump_range, usd_dump_range, ipc_dump_range, ipc_usd_dump_range, sheet_coords, dump_sheet);
 }
@@ -786,12 +807,12 @@ function calculateInflationAndValues(dump_range, usd_dump_range, ipc_dump_range,
   let usd_values_to_dump = [];
   let ipc_values_to_dump = []
   let usd_ipc_values_to_dump = []
-  for (let index = 0; index < dates.length; index++) {
+  for (let index = 0; index < dates.length-1; index++) {
     if (index === 0) {
       values_to_dump.push([first_column_title]);
       usd_values_to_dump.push([second_column_title]);
       ipc_values_to_dump.push([third_column_title])
-      usd_ipc_values_to_dump.push([fourth_column_title])
+      // usd_ipc_values_to_dump.push([fourth_column_title])
       continue;
     }
 
@@ -810,14 +831,14 @@ function calculateInflationAndValues(dump_range, usd_dump_range, ipc_dump_range,
     values_to_dump.push([pesosF]);
     usd_values_to_dump.push([usdF]);
     ipc_values_to_dump.push([infl])
-    usd_ipc_values_to_dump.push([usdH])
+    // usd_ipc_values_to_dump.push([usdH])
 
   }
 
   updateRangeValues(dump_range, values_to_dump);
   updateRangeValues(usd_dump_range, usd_values_to_dump);
   updateRangeValues(ipc_dump_range, ipc_values_to_dump)
-  updateRangeValues(ipc_usd_dump_range, usd_ipc_values_to_dump)
+  // updateRangeValues(ipc_usd_dump_range, usd_ipc_values_to_dump)
 }
 
 /**
